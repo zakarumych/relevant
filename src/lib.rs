@@ -1,5 +1,5 @@
 //! Defines `Relevant` type to use in types that requires
-//! custom dealocation.
+//! custom deallocation.
 //!
 
 /// Values of this type can't be automatically dropped.
