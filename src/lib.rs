@@ -1,6 +1,9 @@
 //! Defines `Relevant` type to use in types that requires
 //! custom deallocation.
 //!
+//! 
+
+#![no_std]
 
 /// Values of this type can't be automatically dropped.
 /// If struct or enum has field with type `Relevant`,
@@ -25,12 +28,12 @@ pub struct Relevant;
 impl Relevant {
     /// Dispose this value.
     pub fn dispose(self) {
-        ::std::mem::forget(self)
+        ::core::mem::forget(self)
     }
 }
 
 impl Drop for Relevant {
     fn drop(&mut self) {
-        println!("Values of this type can't be dropped!")
+        panic!("Values of this type can't be dropped!")
     }
 }
