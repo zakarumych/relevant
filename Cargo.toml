@@ -9,4 +9,3 @@ description = "A small utility type to emulate must-use types"
 [features]
 std = []
 default = ["std"]
-
