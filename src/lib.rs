@@ -7,6 +7,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(not(feature = "std"))]
+use core as std;
+
 /// Values of this type can't be automatically dropped.
 /// If struct or enum has field with type `Relevant`,
 /// it can't be automatically dropped either. And so considered relevant too.
@@ -22,35 +25,41 @@
 /// 
 /// # Panics
 /// 
-/// Panics when dropped.
+/// Panics when dropped unless:
+/// * `log` feature is enabled. It this case it emmits `log::error!`.
+/// * `std` feature is enabled and thread is already in panicking state.
 /// 
 #[derive(Clone, Debug, PartialOrd, PartialEq, Ord, Eq, Hash)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Relevant;
 
 impl Relevant {
     /// Dispose this value.
-    #[cfg(feature = "std")]
     pub fn dispose(self) {
-        ::std::mem::forget(self)
-    }
-
-    #[cfg(not(feature = "std"))]
-    pub fn dispose(self) {
-        ::core::mem::forget(self)
+        std::mem::forget(self)
     }
 }
 
 impl Drop for Relevant {
-
-    #[cfg(feature = "std")]
     fn drop(&mut self) {
-        if !::std::thread::panicking() {
+        whine()
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "log")] {
+        fn whine() {
+            log::error!("Values of this type can't be dropped!")
+        }
+    } else if #[cfg(feature = "std")] {
+        fn whine() {
+            if !std::thread::panicking() {
+                panic!("Values of this type can't be dropped!")
+            }
+        }
+    } else {
+        fn whine()  {
             panic!("Values of this type can't be dropped!")
         }
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn drop(&mut self) {
-        panic!("Values of this type can't be dropped!")
     }
 }
