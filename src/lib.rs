@@ -1,8 +1,12 @@
 //! Defines `Relevant` type to use in types that requires
 //! custom destruction.
-//!
-//! With default feature "std" it `Drop` implementation will not trigger panic
-//! in case of unwinding (e.g. already panicking).
+//! Crate supports 3 main mechnisms for error reporting:
+//! * "panic" feature makes `Relevant` panic on drop
+//! * "log" feature uses `log` crate and `Relevant` will emit `log::error!` on drop.
+//! * otherwise `Relevant` will print into stderr using `eprintln!` on drop.
+//! 
+//! "backtrace" feature will add backtrace to the error unless it is reported via panicking.
+//! "message" feature will add custom message (specified when value was created) to the error.
 //! 
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -15,19 +19,10 @@ use core as std;
 /// it can't be automatically dropped either. And so considered relevant too.
 /// User has to deconstruct such values and call `Relevant::dispose`.
 /// If relevant field is private it means that user has to move value into some public method.
-/// For example `memory::Block` should be returned to the `MemoryAllocator` it came from.
-/// 
-/// User of the engine won't usually deal with real relevant types.
-/// More often user will face wrappers that has backdoor - some technique
-/// to dispose internal relevant fields with runtime cost.
-/// In debug mode such wrappers can put warnings in log.
-/// So that user will know they should be disposed manually.
 /// 
 /// # Panics
 /// 
-/// Panics when dropped unless:
-/// * `log` feature is enabled. It this case it emmits `log::error!`.
-/// * `std` feature is enabled and thread is already in panicking state.
+/// With "panic" feature enabled this value will always panic on drop.
 /// 
 #[derive(Clone, Debug, PartialOrd, PartialEq, Ord, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -47,19 +42,38 @@ impl Drop for Relevant {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "log")] {
-        fn whine() {
-            log::error!("Values of this type can't be dropped!")
+    if #[cfg(all(feature = "panic", feature = "std"))] {
+        macro_rules! sink {
+            ($($x:tt)*) => { if !std::thread::panicking() { panic!($($x)*) } };
+        }
+    } else if #[cfg(feature = "panic")] {
+        macro_rules! sink {
+            ($($x:tt)*) => { panic!($($x)*) };
+        }
+    } else if #[cfg(feature = "log")] {
+        macro_rules! sink {
+            ($($x:tt)*) => { log::error!($($x)*) };
         }
     } else if #[cfg(feature = "std")] {
+        macro_rules! sink {
+            ($($x:tt)*) => { eprintln!($($x)*) };
+        }
+    } else {
+        macro_rules! sink {
+            ($($x:tt)*) => { panic!($($x)*) };
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(all(not(feature = "panic"), any(feature = "std", feature = "log"), feature = "backtrace"))] {
         fn whine() {
-            if !std::thread::panicking() {
-                panic!("Values of this type can't be dropped!")
-            }
+            let backtrace = backtrace::Backtrace::new();
+            sink!("Values of this type can't be dropped!. Trace: {:#?}", backtrace)
         }
     } else {
         fn whine()  {
-            panic!("Values of this type can't be dropped!")
+            sink!("Values of this type can't be dropped!")
         }
     }
 }
